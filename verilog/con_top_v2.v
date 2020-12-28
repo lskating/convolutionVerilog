@@ -2,8 +2,8 @@
 // Author: Simon Liao
 // Function: 3x3 convolution kernel, 7x7 picture data, each data is 16-bit
 // Top_cell: con_5x5
-// Version: v2.0
-// Date: 25th Dec, 2020 
+// Version: v3.0
+// Date: 28th Dec, 2020 
 module con_5x5(
 	input rst_n,			// syn. reset
 	input clk,				// clk, about 100MHz max
@@ -22,7 +22,7 @@ module con_5x5(
 	reg [3:0] core_num;
 	reg [7:0] pics_num;
 	reg [1:0] pics_num_add;
-	//reg valid_temp;s
+
 	wire [15:0] result_temp;
 
 	con_unit cu_juan(
@@ -44,18 +44,8 @@ module con_5x5(
 		.in_Data_31(data_pics[3][1]),
 		.in_Data_32(data_pics[3][2]),
 		.in_Data_33(data_pics[3][3]),
-		.R(result_temp)
+		.R(result_temp)		// result_temp adding area about 150%!!! cannot add clk in the con_unit.
 		);
-
-	// always @(posedge clk) begin
-	// 	if (valid_temp) result_temp_reg <= result_temp;
-	// 	else result_temp_reg <= result_temp_reg;
-	// end
-
-	always @(posedge clk or negedge rst_n) begin
-		if (!rst_n) result <= 16'h0;
-		else result <= valid ? result_temp : result;
-	end
 
 	always @(posedge clk or negedge rst_n) begin
 		if (!rst_n) begin
@@ -83,10 +73,16 @@ module con_5x5(
 		end	
 		else if(pics_num > 8'h50 && pics_num < 8'h55) begin
 			pics_num <= pics_num + 1'b1;
-			if(pics_num_add == 2'd3) pics_num_add <= 2'd1;
-			else pics_num_add <= pics_num_add + 1'b1;
-			if(pics_num == 8'h54) finish <= 1'b1;
-			else finish <= 1'b0;
+			case(pics_num_add)
+				2'd3: pics_num_add <= 2'd1;
+				2'd2: pics_num_add <= 2'd3;
+				2'd1: pics_num_add <= 2'd2;
+				default: pics_num_add <= 2'd0;
+			endcase
+			if(pics_num == 8'h54) 
+				finish <= 1'b1;
+			else 
+				finish <= 1'b0;
 		end
 		else begin
 			pics_num <= 8'h0;
@@ -111,33 +107,42 @@ module con_5x5(
 		endcase
 	end
 
-	always@(posedge clk) begin
-		case(pics_num_add) 
-			2'd1:begin
-				data_pics[1][1] <= data_pics_next[1][1];
-				data_pics[1][2] <= data_pics_next[1][2];
-				data_pics[1][3] <= data_pics_next[1][3];
-				data_pics[2][1] <= data_pics_next[2][1];
-				data_pics[2][2] <= data_pics_next[2][2];
-				data_pics[2][3] <= data_pics_next[2][3];
-				data_pics[3][1] <= data_pics_next[3][1];
-				data_pics[3][2] <= data_pics_next[3][2];
-				data_pics[3][3] <= data_pics_next[3][3];
-				valid <= 1'b0; //valid_temp <= 1'b0;
-			end
-			2'd3:begin
-				valid <= 1'b1;
-				//valid_temp <= 1'b1;
-			end
-			default:begin
-				valid <= 1'b0;
-				//valid_temp <= 1'b1;
-			end
-		endcase
+
+	// result
+	always@(posedge clk or negedge rst_n) begin
+		if (!rst_n)  begin
+			valid <= 1'b0;
+			result <= 16'h0;
+		end
+		else 
+			case(pics_num_add) 
+				2'd1:begin
+					data_pics[1][1] <= data_pics_next[1][1];
+					data_pics[1][2] <= data_pics_next[1][2];
+					data_pics[1][3] <= data_pics_next[1][3];
+					data_pics[2][1] <= data_pics_next[2][1];
+					data_pics[2][2] <= data_pics_next[2][2];
+					data_pics[2][3] <= data_pics_next[2][3];
+					data_pics[3][1] <= data_pics_next[3][1];
+					data_pics[3][2] <= data_pics_next[3][2];
+					data_pics[3][3] <= data_pics_next[3][3];
+					valid <= 1'b0;
+					result <= result;
+				end
+				2'd3:begin
+					valid <= 1'b1;
+					result <=  result_temp;
+				end
+				default:begin
+					valid <= 1'b0;
+					result <= result;
+				end
+			endcase
 	end
 
 	always@(posedge clk) begin
-		if(pics_num < 8'h0A)
+		// row 1
+		if(pics_num < 8'd10)
 			case (pics_num)
 				8'h1: data_pics_next[1][1] = pics_now;
 				8'h2: data_pics_next[2][1] = pics_now;
@@ -149,7 +154,13 @@ module con_5x5(
 				8'h8: data_pics_next[2][3] = pics_now;
 				8'h9: data_pics_next[3][3] = pics_now;
 			endcase
-		else if((pics_num > 8'h9 && pics_num < 8'd21) || (pics_num > 8'd40 && pics_num < 8'd51) || (pics_num > 8'd70 && pics_num < 8'd81)) begin
+		// row 1
+		// 10 ~ 21
+		// 40 ~ 51
+		// 70 ~ 81
+		else if((pics_num > 8'd9 && pics_num < 8'd22) 
+			|| (pics_num > 8'd39 && pics_num < 8'd52) 
+			|| (pics_num > 8'd69 && pics_num < 8'd82)) begin
 			data_pics_next[1][1] = data_pics[1][2];
 			data_pics_next[2][1] = data_pics[2][2];
 			data_pics_next[3][1] = data_pics[3][2];
@@ -162,7 +173,14 @@ module con_5x5(
 				2'd3: data_pics_next[3][3] = pics_now;
 			endcase
 		end
-		else if((pics_num > 8'd21 && pics_num < 8'd25) || (pics_num > 8'd51 && pics_num < 8'd55) || (pics_num > 8'd36 && pics_num < 8'd40) || (pics_num > 8'd66 && pics_num < 8'd70)) begin
+		// 22 23 24
+		// 52 53 54
+		// 37 38 39
+		// 67 68 69
+		else if((pics_num > 8'd21 && pics_num < 8'd25) 
+			|| (pics_num > 8'd51 && pics_num < 8'd55) 
+			|| (pics_num > 8'd36 && pics_num < 8'd40) 
+			|| (pics_num > 8'd66 && pics_num < 8'd70)) begin
 			data_pics_next[1][1] = data_pics[2][1];
 			data_pics_next[1][2] = data_pics[2][2];
 			data_pics_next[1][3] = data_pics[2][3];
@@ -175,7 +193,10 @@ module con_5x5(
 				2'd3: data_pics_next[3][3] = pics_now;
 			endcase
 		end
-		else if((pics_num > 8'd25 && pics_num < 8'd36) || (pics_num > 8'd55 && pics_num < 8'd66)) begin
+		// 25 ~ 36
+		// 55 ~ 66
+		else if((pics_num > 8'd24 && pics_num < 8'd37) 
+			|| (pics_num > 8'd54 && pics_num < 8'd67)) begin
 			data_pics_next[1][3] = data_pics[1][2];
 			data_pics_next[2][3] = data_pics[2][2];
 			data_pics_next[3][3] = data_pics[3][2];
@@ -187,6 +208,9 @@ module con_5x5(
 				2'd2: data_pics_next[2][1] = pics_now;
 				2'd3: data_pics_next[3][1] = pics_now;
 			endcase
+		end
+		else begin
+			// no operation
 		end
 	end
 endmodule
@@ -201,7 +225,8 @@ module con_unit(
 	output [15:0] R
 	);
 
-	wire [15:0]P[1:3][1:3];
+	wire [15:0] P[1:3][1:3];
+	wire [15:0] R_temp[1:3];
 	multiplier16x16 mul_11(core_11,in_Data_11,P[1][1]);
 	multiplier16x16 mul_12(core_12,in_Data_12,P[1][2]);
 	multiplier16x16 mul_13(core_13,in_Data_13,P[1][3]);
@@ -211,9 +236,21 @@ module con_unit(
 	multiplier16x16 mul_31(core_31,in_Data_31,P[3][1]);
 	multiplier16x16 mul_32(core_32,in_Data_32,P[3][2]);
 	multiplier16x16 mul_33(core_33,in_Data_33,P[3][3]);
-	assign R = P[1][1]+P[1][2]+P[1][3]+P[2][1]+P[2][2]+P[2][3]+P[3][1]+P[3][2]+P[3][3];
+
+	assign R_temp[1] = P[1][1] + P[1][2] + P[1][3];
+	assign R_temp[2] = P[2][1] + P[2][2] + P[2][3];
+	assign R_temp[3] = P[3][1] + P[3][2] + P[3][3];
+	assign R = R_temp[1] + R_temp[2] + R_temp[3];
 endmodule
 
+// module adder16_x3(
+// 	input [15:0]A,
+// 	input [15:0]B,
+// 	input [15:0]C,
+// 	output [15:0]S
+// 	);
+// 	assign S = A + B + C;
+// endmodule
 
 module multiplier16x16(A,B,P_16);
 	input signed [15:0]A,B; 	//16-bit
@@ -277,7 +314,11 @@ module multiplier16x16(A,B,P_16);
 	assign Carry22[4:0] = {5'b0};
 	// level-3 4to2
 
-	assign P_32 = {3'b0,Carry21,1'b0} + {4'b0,Sum21} + {Carry22[23:0],8'b0} + {Sum22[24:0],7'b0};
+	wire [31:0] sum_temp1,sum_temp2;
+	assign sum_temp1 = {3'b0,Carry21,1'b0} + {4'b0,Sum21};
+	assign sum_temp2 = {Carry22[23:0],8'b0} + {Sum22[24:0],7'b0};
+	assign P_32 = sum_temp1 + sum_temp2;
+
 	// assign P_out = {10'b0,Sum11} + {9'b0,Carry11,1'b0} + {4'b0,Sum12,6'b0} + {Sum13,12'b0} + {Carry13[18:0],13'b0} + {3'b0,Carry12,7'b0};	// pass!!!
 	// assign P_32 = PP_1 + {PP_2,2'b0} + {PP_3,4'b0} + {PP_4,6'b0} + {PP_5,8'b0} + {PP_6,10'b0} + {PP_7,12'b0} + {PP_8,14'b0} + {PP_9,16'b0};
 	// compressor_tree compressor_tree_my(PP_1,PP_2,PP_3,PP_4,PP_5,PP_6,PP_7,PP_8,PP_9,P_out);
@@ -345,3 +386,211 @@ module compressor_3to2(a,b,cin,sum,cout);
 	assign sum = a + b + cin;
 	assign cout = (a&b) + (a&cin) + (b&cin); 
 endmodule
+
+
+
+
+
+// 	wire [31:0] result1,result2;
+// 	wire caray1,carray2;
+// 	Add32_head add32_head_1(
+// 		.A({3'b0,Carry21,1'b0}),
+// 		.B({4'b0,Sum21}),
+// 		.C_in(1'b0),
+// 		.Result(result1),
+// 		.C_out(caray1)
+// 		);
+// 	Add32_head add32_head_2(
+// 		.A({Carry22[23:0],8'b0}),
+// 		.B({Sum22[24:0],7'b0}),
+// 		.C_in(1'b0),
+// 		.Result(result2),
+// 		.C_out(carray2)
+// 		);
+// 	Add32_head add32_head_3(
+// 		.A(result1),
+// 		.B(result2),
+// 		.C_in(1'b0),
+// 		.Result(P_32),
+// 		.C_out()
+// 		);
+// // adder
+// module Add32_head(
+// 	input [31:0]A,
+// 	input [31:0]B,
+// 	input C_in,
+// 	output [31:0]Result,
+// 	output C_out
+// 	);
+// 	wire [3:0]G;wire [3:0]P;
+// 	assign G[3:2]=2'b00;
+// 	assign P[3:2]=2'b00;
+// 	Add16_head add16_low(
+// 		.A(A[15:0]),
+// 		.B(B[15:0]),
+// 		.C_in(C_in),
+// 		.F(Result[15:0]),
+// 		.Gm(G[0]),
+// 		.Pm(P[0])
+// 		);
+// 	wire C_16;
+// 	Add16_head add16_high(
+// 		.A(A[31:16]),
+// 		.B(B[31:16]),
+// 		.C_in(C_16),
+// 		.F(Result[31:16]),
+// 		.Gm(G[1]),
+// 		.Pm(P[1])
+// 		);
+// 	assign C_16=G[0]|P[0]&C_in;
+// 	assign C_out=G[1]|P[1]&G[0]|P[1]&P[0]&C_in;
+// endmodule
+
+// module Add16_head(
+// 	input [15:0]A,
+// 	input [15:0]B,
+// 	input C_in,
+// 	output [15:0] F,
+// 	output Gm,
+// 	output Pm,
+// 	output C_out
+// 	);
+
+// 	wire [3:0]G;
+// 	wire [3:0]P;
+// 	wire [4:1]C;
+// 	Add4_head A0(
+// 		.A(A[3:0]),
+// 		.B(B[3:0]),
+// 		.C_in(C_in),
+// 		.F(F[3:0]),
+// 		.Gm(G[0]),
+// 		.Pm(P[0])
+// 		);
+// 	Add4_head A1(
+// 		.A(A[7:4]),
+// 		.B(B[7:4]),
+// 		.C_in(C[1]),
+// 		.F(F[7:4]),
+// 		.Gm(G[1]),
+// 		.Pm(P[1])
+// 		);
+// 	Add4_head A3(
+// 		.A(A[11:8]),
+// 		.B(B[11:8]),
+// 		.C_in(C[2]),
+// 		.F(F[11:8]),
+// 		.Gm(G[2]),
+// 		.Pm(P[2])
+// 		);
+// 	Add4_head A4(
+// 		.A(A[15:12]),
+// 		.B(B[15:12]),
+// 		.C_in(C[3]),
+// 		.F(F[15:12]),
+// 		.Gm(G[3]),
+// 		.Pm(P[3])
+// 		);
+// 	CLA_4 AAt(
+// 		.P(P),
+// 		.G(G),
+// 		.C_in(C_in),
+// 		.Ci(C),
+// 		.Gm(Gm),
+// 		.Pm(Pm)
+// 		);
+// 	assign C_out=C[4];
+// endmodule
+
+
+// //四位超前进位加法器
+// module Add4_head(
+// 	input [3:0]A,
+// 	input [3:0]B,
+// 	input C_in,
+// 	output [3:0]F,
+// 	output Gm,
+// 	output Pm,
+// 	output C_out
+// 	);
+
+// 	wire [3:0] G;
+// 	wire [3:0] P;
+// 	wire [4:1] C;
+
+// 	Add1 u1(	
+// 		.a(A[0]),
+// 		.b(B[0]),
+// 		.C_in(C_in),
+// 		.f(F[0]),
+// 		.g(G[0]),
+// 		.p(P[0])
+// 		);
+// 	Add1 u2(	
+// 		.a(A[1]),
+// 		.b(B[1]),
+// 		.C_in(C[1]),
+// 		.f(F[1]),
+// 		.g(G[1]),
+// 		.p(P[1])
+// 		);
+// 	Add1 u3(	
+// 		.a(A[2]),
+// 		.b(B[2]),
+// 		.C_in(C[2]),
+// 		.f(F[2]),
+// 		.g(G[2]),
+// 		.p(P[2])
+// 		);
+// 	Add1 u4(	
+// 		.a(A[3]),
+// 		.b(B[3]),
+// 		.C_in(C[3]),
+// 		.f(F[3]),
+// 		.g(G[3]),
+// 		.p(P[3])
+// 		);
+// 	CLA_4 uut(
+// 		.P(P),
+// 		.G(G),
+// 		.C_in(C_in),
+// 		.Ci(C),
+// 		.Gm(Gm),
+// 		.Pm(Pm)
+// 		);
+// 	assign C_out=C[4];
+// endmodule
+
+// //一位加法器
+// module Add1(
+// 	input a,
+// 	input b,
+// 	input C_in,
+// 	output f,
+// 	output g,
+// 	output p
+// 	);
+// 	assign f=a^b^C_in;
+// 	assign g=a&b;
+// 	assign p=a|b;
+// endmodule
+
+// //4位CLA部件
+// module CLA_4(
+// 	input [3:0]P,
+// 	input [3:0]G,
+// 	input C_in,
+// 	output [4:1]Ci,
+// 	output Gm,
+// 	output Pm
+// 	);
+
+// 	assign Ci[1]=G[0]|P[0]&C_in;
+// 	assign Ci[2]=G[1]|P[1]&G[0]|P[1]&P[0]&C_in;
+// 	assign Ci[3]=G[2]|P[2]&G[1]|P[2]&P[1]&G[0]|P[2]&P[1]&P[0]&C_in;
+// 	assign Ci[4]=G[3]|P[3]&G[2]|P[3]&P[2]&G[1]|P[3]&P[2]&P[1]&G[0]|P[3]&P[2]&P[1]&P[0]&C_in;
+
+// 	assign Gm=G[3]|P[3]&G[2]|P[3]&P[2]&G[1]|P[3]&P[2]&P[1]&G[0];
+// 	assign Pm=P[3]&P[2]&P[1]&P[0];
+
+// endmodule
