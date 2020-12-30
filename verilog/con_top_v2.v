@@ -14,6 +14,8 @@ module con_5x5(
 	output reg [15:0] result	// 16-bit result for each convoution
 	);
 
+	parameter pics_matrix 4'd7;
+
 	reg [15:0] data_core[1:3][1:3];
 	reg [15:0] data_pics[1:3][1:3];
 	reg [15:0] data_pics_next[1:3][1:3];
@@ -158,7 +160,7 @@ module con_5x5(
 		// 10 ~ 21
 		// 40 ~ 51
 		// 70 ~ 81
-		else if((pics_num > 8'd9 && pics_num < 8'd22) 
+		else if((pics_num > 8'd9 && pics_num < (3 * pics_matrix + 1'b1))) 
 			|| (pics_num > 8'd39 && pics_num < 8'd52) 
 			|| (pics_num > 8'd69 && pics_num < 8'd82)) begin
 			data_pics_next[1][1] = data_pics[1][2];
